@@ -1,28 +1,44 @@
-FROM openjdk:8u191-jre-alpine3.8
+FROM maven:3.6.0-jdk-11-slim AS package
 
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq
+
+RUN mkdir -p /app
+WORKDIR /app
+
+COPY pom.xml                          .
+COPY run.sh                   .
+RUN mvn -e -B dependency:resolve
+
+COPY src                              ./src
+RUN mvn verify --fail-never -DskipTests
+
+WORKDIR /app/
+
+ENTRYPOINT ["/bin/sh"]
+CMD ["run.sh"]
+
+FROM fabric8/java-alpine-openjdk11-jre AS testrun
 RUN apk add curl jq
 
-# Workspace
-WORKDIR /usr/share/udemy
+RUN mkdir -p /jar
+WORKDIR /jar/
 
-# ADD .jar under target from host
-# into this image
-ADD target/selenium-docker.jar 			selenium-docker.jar
-ADD target/selenium-docker-tests.jar 	selenium-docker-tests.jar
-ADD target/libs							libs
-
-# in case of any other dependency like .csv / .json / .xls
-# please ADD that as well
-
-# ADD suite files
-# ADD book-flight-module.xml				book-flight-module.xml
-# ADD search-module.xml					search-module.xml
-
-# ADD health check script
+COPY --from=package /app/target/selenium-docker.jar              .
+COPY --from=package /app/target/selenium-docker-tests.jar        .
+COPY --from=package /app/target/libs                        ./libs
 ADD healthcheck.sh                      healthcheck.sh
+COPY src/test/resources                                     ./src/test/resources
+COPY run.sh                                                 .
 
-# BROWSER
-# HUB_HOST
-# MODULE
+WORKDIR /jar/
 
-ENTRYPOINT sh healthcheck.sh
+
+ENTRYPOINT ["/bin/sh"]
+CMD ["healthcheck.sh"]
+
+
+
+
+
